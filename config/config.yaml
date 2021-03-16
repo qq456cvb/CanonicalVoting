@@ -1,0 +1,40 @@
+data:
+    scan2cad: /path/to/full_annotations.json
+    scannet: /data/ScanNetV2
+    train_split: /path/to/scannetv2_train.txt
+    val_split: /path/to/scannetv2_val.txt
+    train_segments: /path/to/scan2cad/train/scan2cad_segments.pkl
+    val_segments: /path/to/scan2cad/val/scan2cad_segments.pkl
+    gt_path: /path/to/results_gt
+
+scannet_res: 0.03
+num_workers: 10
+
+max_epoch: 160
+batch_size: 3
+
+log_scale: True
+scale_factor: 1.
+xyz_factor: 1.
+augment_color: False
+augment: True
+start_epoch: 0
+
+xyz_component_weights: 1,1,1
+weight_decay: 0
+
+use_xyz: False
+
+category: 'all'
+
+opt:
+    learning_rate: 1e-3
+    bn_decay_step: 20
+    bn_decay_rate: 0.5
+    lr_decay_steps: 80,120,160
+    lr_decay_rates: 0.1,0.1,0.1
+    
+hydra:
+    sweep:
+      dir: multirun
+      subdir: ${category}

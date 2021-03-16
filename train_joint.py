@@ -1,29 +1,17 @@
+from utils.calc_map import eval_det_multiprocessing, get_iou_obb
+from utils.dataloader import ScanNetXYZProbMultiDataset
 import torch
 import hydra
-from experiments.dataloader import ScanNetXYZProbSymDataset
-from minkunet import MinkUNet34C
+from utils.minkunet import MinkUNet34C
 import logging
-from multiprocessing import cpu_count
 import numpy as np
-from tqdm import tqdm, trange
+from tqdm import tqdm
 import MinkowskiEngine as ME
-from sklearn.preprocessing import MinMaxScaler
-import visdom
-from skimage.exposure import equalize_hist
-from utils import HardestNegativeTripletSelector
-import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import MinMaxScaler
 import hv_cuda
-import hydra.utils as utils
 import torch.nn as nn
 import os
-from calc_map import eval_det_multiprocessing, get_iou_obb
-import cv2
-from adabelief_pytorch import AdaBelief
-logger = logging.getLogger(__name__)
-cm = plt.get_cmap('jet')
 
+logger = logging.getLogger(__name__)
 
 thresh_high = 60
 thresh_low = 10
@@ -35,9 +23,7 @@ class HVFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, points, xyz, scale, obj, res, num_rots):
         ctx.save_for_backward(points, xyz, scale, obj, res, num_rots)
-        # t = time()
         outputs = hv_cuda.forward(points, xyz, scale, obj, res, num_rots)
-        # print(time() - t)
         grid_obj, grid_rot, grid_scale = outputs
         return grid_obj, grid_rot, grid_scale
     
@@ -90,86 +76,23 @@ class AverageMeter(object):
 
 
 def collate_fn(batch):
-    id_scans, coords, feats, xyz_labels, scale_labels, obj_labels, class_labels = list(zip(*batch))
+    id_scans, coords, feats, xyz_labels, scale_labels, class_labels = list(zip(*batch))
 
     # Generate batched coordinates
     coords_batch = ME.utils.batched_coordinates(coords)
 
     # Concatenate all lists
     feats_batch = torch.from_numpy(np.concatenate(feats, 0)).float()
-    # xyz_labels_batch = torch.from_numpy(np.concatenate(xyz_labels, 0)).float()
+    xyz_labels_batch = torch.from_numpy(np.concatenate(xyz_labels, 0)).float()
     scale_labels_batch = torch.from_numpy(np.concatenate(scale_labels, 0)).float()
-    obj_labels_batch = torch.from_numpy(np.concatenate(obj_labels, 0)).long()
     class_labels_batch = torch.from_numpy(np.concatenate(class_labels, 0)).long()
-    # obj_heatmaps = [torch.from_numpy(heatmap).float() for heatmap in obj_heatmaps]
-    xyz_labels_batch = []
-    for xyz_label in xyz_labels:
-        xyz_label_th = []
-        for segments_idx, xyzs in xyz_label:
-            xyz_label_th.append([torch.from_numpy(segments_idx).long(), [torch.from_numpy(xyz).float() for xyz in xyzs]])
-        xyz_labels_batch.append(xyz_label_th)
     
-    return id_scans, coords_batch, feats_batch, xyz_labels_batch, scale_labels_batch, obj_labels_batch, class_labels_batch
-
-
-def get_heat_map(scan_points, xyz_pred, scale_pred, prob_pred, cfg):
-    scan_points = scan_points * cfg.scannet_res
-    
-    res = cfg.scannet_res
-    corners = np.array([np.min(scan_points, 0), np.max(scan_points, 0)])
-    corners_xz = np.stack([corners[:, 0], corners[:, 2]], -1)
-    grid = np.zeros(np.ceil((corners_xz[1] - corners_xz[0]) / res).astype(np.int))
-    # grid_rots = np.zeros_like(grid)
-    # grid_weights = np.zeros_like(grid)
-    print(grid.shape)
-    
-    num_rots = 120
-    interval_rots = 2 * np.pi / num_rots
-    y_cand = 0
-    for i in tqdm(range(scan_points.shape[0])):
-        prob = prob_pred[i]
-        corr = xyz_pred[i] * scale_pred[i]
-        if np.sum(np.abs(corr)) < 1e-10:
-            continue
-        point = scan_points[i]
-        point_xz = np.array([point[0], point[2]])
-        y_cand += point[1] - corr[1]
-        for j in range(num_rots):
-            theta = j * interval_rots
-            offset = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]) @ -np.array([corr[0], corr[2]])
-            
-            center_cand = point_xz + offset
-            center_grid = (center_cand - corners_xz[0]) / res
-            
-            # print(center_grid)
-            # import pdb; pdb.set_trace()
-            
-            if center_grid[0] < 0 or center_grid[1] < 0 or center_grid[0] >= grid.shape[0] - 1 or center_grid[1] >= grid.shape[1] - 1:
-                continue
-            
-            # import pdb; pdb.set_trace()
-            center_grid_floor = np.floor(center_grid).astype(np.int)
-            center_grid_ceil = center_grid_floor + 1
-            residual = center_grid - center_grid_floor
-            
-            wx0 = 1. - residual[0]
-            wx1 = residual[0]
-            wz0 = 1. - residual[1]
-            wz1 = residual[1]
-            
-            grid[center_grid_floor[0], center_grid_floor[1]] += wx0 * wz0 * prob
-            grid[center_grid_floor[0], center_grid_ceil[1]] += wx0 * wz1 * prob
-            grid[center_grid_ceil[0], center_grid_floor[1]] += wx1 * wz0 * prob
-            grid[center_grid_ceil[0], center_grid_ceil[1]] += wx1 * wz1 * prob
-    
-    grid /= np.sum(grid)
-    grid = np.flip(grid.transpose(), 1)
-    return grid
+    return id_scans, coords_batch, feats_batch, xyz_labels_batch, scale_labels_batch, class_labels_batch
 
 
 def set_bn_momentum_default(bn_momentum):
     def fn(m):
-        if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+        if isinstance(m, (ME.MinkowskiBatchNorm)):
             m.momentum = bn_momentum
     return fn
 
@@ -251,20 +174,20 @@ def compute_map(pred_map_cls, gt_map_cls, ovthresh=0.5):
     ret_dict['AR'] = np.mean(rec_list)
     return ret_dict
 
-# def get_top8_classes_scannet():                                                                                                                                                                                                                                                                                           
-#     top = collections.defaultdict(lambda : "other")
-#     top["03211117"] = "display"
-#     top["04379243"] = "table"
-#     top["02808440"] = "bathtub"
-#     top["02747177"] = "trashbin"
-#     top["04256520"] = "sofa"
-#     top["03001627"] = "chair"
-#     top["02933112"] = "cabinet"
-#     top["02871439"] = "bookshelf"
-#     return top
+
+idx2name = {
+    0: 'others',
+    1: '03211117',
+    2: '04379243',
+    3: '02808440',
+    4: '02747177',
+    5: '04256520',
+    6: '03001627',
+    7: '02933112',
+    8: '02871439'
+}
 
 
-# TODO: try huber, try weight decay, try SGD
 @hydra.main(config_path='config/config.yaml')
 def main(cfg):
     global BN_MOMENTUM_INIT
@@ -281,44 +204,33 @@ def main(cfg):
     BASE_LEARNING_RATE = cfg.opt.learning_rate
     LR_DECAY_STEPS = [int(x) for x in cfg.opt.lr_decay_steps.split(',')]
     LR_DECAY_RATES = [float(x) for x in cfg.opt.lr_decay_rates.split(',')]
-    print(cfg.pretty())
     
-    cate_int = cfg.category
     if type(cfg.category) == int:
         cfg.category = "{:08d}".format(cfg.category)
-    cmap = plt.get_cmap('jet')
-    vis = visdom.Visdom(port=21391)
-    train_dataset = ScanNetXYZProbSymDataset(cfg, training=True, augment=cfg.augment)
-    val_dataset = ScanNetXYZProbSymDataset(cfg, training=False, augment=False)
+    print(cfg.pretty())
+        
+    train_dataset = ScanNetXYZProbMultiDataset(cfg, training=True, augment=cfg.augment)
+    val_dataset = ScanNetXYZProbMultiDataset(cfg, training=False, augment=False)
     
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True, collate_fn=collate_fn, num_workers=cfg.num_workers, drop_last=True)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, collate_fn=collate_fn, shuffle=True, batch_size=1, num_workers=cfg.num_workers)
 
     logger.info('Start training...')
     
+    nclasses = 9
     # each class predict xyz and scale independently
-    model = MinkUNet34C(6 if cfg.use_xyz else 3, 8)
+    model = MinkUNet34C(6 if cfg.use_xyz else 3, 6 * nclasses + nclasses + 1)
     optimizer = torch.optim.Adam(
         model.parameters(),
-        lr=1e-3,
+        lr=cfg.opt.learning_rate,
         weight_decay=cfg.weight_decay
     )
     bn_lbmd = lambda it: max(BN_MOMENTUM_INIT * BN_DECAY_RATE**(int(it / BN_DECAY_STEP)), BN_MOMENTUM_MAX)
     bnm_scheduler = BNMomentumScheduler(model, bn_lambda=bn_lbmd, last_epoch=cfg.start_epoch-1)
-    
-    if cfg.load_checkpoint:
-        logger.info('loading checkpoint...')
-        # model.load_state_dict(torch.load(utils.to_absolute_path('outputs/2020-06-19/17-31-30/epoch95.pth')))
-        # model.load_state_dict(torch.load(utils.to_absolute_path('outputs/2020-09-29/09-24-27/epoch0.pth')))
-        model.load_state_dict(torch.load(utils.to_absolute_path('multirun/{}/epoch{}.pth'.format(cate_int, cfg.start_epoch))))
-    
+
     hv = HoughVoting(cfg.scannet_res)
     
-    mse = torch.nn.MSELoss()
     obj_criterion = torch.nn.CrossEntropyLoss()
-    heatmap_criterion = torch.nn.KLDivLoss(reduction='batchmean')
-    # heatmap_criterion = torch.nn.BCELoss()
-    logsoftmax = torch.nn.LogSoftmax(dim=-1)
     model = model.cuda()
     xyz_weights = torch.tensor([float(x) for x in cfg.xyz_component_weights.split(',')]).cuda()
     
@@ -334,73 +246,55 @@ def main(cfg):
         
         with tqdm(enumerate(train_dataloader)) as t:
             for i, data in t:
-                _, scan_points, scan_feats, scan_xyz_labels, scan_scale_labels, scan_obj_labels, _ = data
-                mask = scan_obj_labels == 1
-                if not torch.any(mask):
-                    continue
+                optimizer.zero_grad()
+                _, scan_points, scan_feats, scan_xyz_labels, scan_scale_labels, scan_class_labels = data
                 
                 feats = scan_feats.reshape(-1, 6 if cfg.use_xyz else 3) # recenter to [-1, 1] ?
                 feats[:, -3:] = feats[:, -3:] * 2. - 1.
-                scan_input = ME.SparseTensor(feats, coords=scan_points).to('cuda')
+                scan_input = ME.SparseTensor(feats, scan_points).to('cuda')
                 scan_output = model(scan_input)
                 
-                scan_output_xyz = scan_output.F[:, :3]
-                scan_output_scale = scan_output.F[:, 3:6]
-                scan_output_obj = scan_output.F[:, 6:8]
+                class_label_idx = scan_class_labels.cuda().unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 3)
+                class_label_idx[class_label_idx < 0] = 0  # since we have mask to filter out, just set to zero here
+                class_label_idx[class_label_idx == nclasses] = 0
+                scan_output_xyz = torch.gather(scan_output.F[:, :3 * nclasses].reshape(-1, nclasses, 3), 1, class_label_idx)[:, 0]
+                scan_output_scale = torch.gather(scan_output.F[:, 3 * nclasses:6 * nclasses].reshape(-1, nclasses, 3), 1, class_label_idx)[:, 0]
+                scan_output_class = scan_output.F[:, 6 * nclasses:]
 
-
-                loss_obj = obj_criterion(scan_output_obj, scan_obj_labels.cuda())
-                losses['loss_obj'] = loss_obj
-                
+                mask = (scan_class_labels < nclasses) & (0 <= scan_class_labels)
                 
                 loss_xyz = torch.zeros(()).cuda()
                 loss_scale = torch.zeros(()).cuda()
-                if cfg.log_scale:
-                    scan_scale_target = torch.log(scan_scale_labels[mask].cuda())
-                else:
-                    scan_scale_target = scan_scale_labels[mask].cuda()
-                    
-                loss_scale = torch.mean((scan_output_scale[mask] - scan_scale_target) ** 2 * xyz_weights)
-                
-                loss_xyz = []
-                for j in range(cfg.batch_size):
-                    batch_idx = scan_points[:, 0] == j
-                    curr_points = scan_points[:, 1:][batch_idx]
-                    
-                    for segments_idx, xyzs in scan_xyz_labels[j]:
-                        pred = scan_output_xyz[segments_idx.cuda()]
-                        loss_xyz_obj = []
-                        for xyz in xyzs:
-                            loss_xyz_obj.append(torch.mean((pred - xyz.cuda()) ** 2 * xyz_weights))
-                        loss_xyz_obj = torch.min(torch.stack(loss_xyz_obj))
-                        loss_xyz.append(loss_xyz_obj)
+                loss_class = torch.zeros(()).cuda()
+                if torch.any(mask):
+                    if cfg.log_scale:
+                        scan_scale_target = torch.log(scan_scale_labels[mask].cuda())
+                    else:
+                        scan_scale_target = scan_scale_labels[mask].cuda()
                         
-                loss_xyz = torch.mean(torch.stack(loss_xyz))
-                
-                loss_xyz *= cfg.xyz_factor
-                loss_scale *= cfg.scale_factor
-                
-                losses['loss_xyz'] = loss_xyz
-                losses['loss_scale'] = loss_scale
-                
+                    loss_scale = torch.mean((scan_output_scale[mask] - scan_scale_target) ** 2 * xyz_weights)
+                    loss_xyz = torch.mean((scan_output_xyz[mask] - scan_xyz_labels[mask].cuda()) ** 2 * xyz_weights)  # only optimize xyz when there are objects
+                    loss_class = obj_criterion(scan_output_class, scan_class_labels.cuda())
+                    
+                    loss_xyz *= cfg.xyz_factor
+                    loss_scale *= cfg.scale_factor
+                    
+                    losses['loss_xyz'] = loss_xyz
+                    losses['loss_scale'] = loss_scale
+                    losses['loss_class'] = loss_class
+                    
                 loss = torch.sum(torch.stack(list(losses.values())))
-
-                optimizer.zero_grad()
                 loss.backward()
-                
                 # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
-                optimizer.step()
-                
                 meter.update(loss.item())
                 
-                # t.set_description('Batch %d' % i)
-                # print(prob_pred.max().item())
                 t.set_postfix(loss=meter.avg, **dict([(k, v.item()) for (k, v) in losses.items()]))
+                optimizer.step()
         
-        if epoch % 5 == 0:
+        if epoch % 10 == 0:
             torch.save(model.state_dict(), 'epoch{}.pth'.format(epoch))
         
-        if epoch % 3 == 0:
+        if epoch % 10 == 0:
             # validation
             model.eval()
             meter.reset()
@@ -408,29 +302,30 @@ def main(cfg):
             pred_map_cls = {}
             gt_map_cls = {}
             cnt = 0
-            for scan_ids, scan_points, scan_feats, scan_xyz_labels, scan_scale_labels, scan_obj_labels, _ in tqdm(val_dataloader):
-                mask = scan_obj_labels == 1
-                if not torch.any(mask):
-                    continue
+            for scan_ids, scan_points, scan_feats, scan_xyz_labels, scan_scale_labels, scan_class_labels in tqdm(val_dataloader):
                 cnt += 1
                 id_scan = scan_ids[0]
                 
                 feats = scan_feats.reshape(-1, 6 if cfg.use_xyz else 3)  # recenter to [-1, 1]?
                 feats[:, -3:] = feats[:, -3:] * 2. - 1.
-                scan_input = ME.SparseTensor(feats, coords=scan_points).to('cuda')
+                scan_input = ME.SparseTensor(feats, scan_points).to('cuda')
                 with torch.no_grad():
                     scan_output = model(scan_input)
                 
-                scan_output_xyz = scan_output.F[:, :3]
-                scan_output_scale = scan_output.F[:, 3:6]
-                scan_output_obj = scan_output.F[:, 6:8]
+                scan_output_xyz = scan_output.F[:, :3 * nclasses]
+                scan_output_scale = scan_output.F[:, 3 * nclasses:6 * nclasses]
+                scan_output_class = scan_output.F[:, 6 * nclasses:]
+                
+                class_label_idx = scan_output_class.argmax(-1).unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 3)
+                class_label_idx[class_label_idx == nclasses] = 0
+                scan_output_xyz = torch.gather(scan_output_xyz.reshape(-1, nclasses, 3), 1, class_label_idx)[:, 0]
+                scan_output_scale = torch.gather(scan_output_scale.reshape(-1, nclasses, 3), 1, class_label_idx)[:, 0]
 
-                loss_obj = obj_criterion(scan_output_obj, scan_obj_labels.cuda())
-                losses['loss_obj'] = loss_obj
+                mask = (scan_class_labels < nclasses) & (0 <= scan_class_labels)
                 
-                
-                loss_xyz = torch.zeros(())
-                loss_scale = torch.zeros(())
+                loss_xyz = torch.zeros(()).cuda()
+                loss_scale = torch.zeros(()).cuda()
+                loss_class = torch.zeros(()).cuda()
                 
                 if cfg.log_scale:
                     scan_scale_target = torch.log(scan_scale_labels[mask].cuda())
@@ -438,47 +333,34 @@ def main(cfg):
                     scan_scale_target = scan_scale_labels[mask].cuda()
                     
                 loss_scale = torch.mean((scan_output_scale[mask] - scan_scale_target) ** 2 * xyz_weights)
-                
-                loss_xyz = []
-                for j in range(1):
-                    batch_idx = scan_points[:, 0] == j
-                    curr_points = scan_points[:, 1:][batch_idx]
-                    for segments_idx, xyzs in scan_xyz_labels[j]:
-                        pred = scan_output_xyz[segments_idx.cuda()]
-                        loss_xyz_obj = []
-                        for xyz in xyzs:
-                            loss_xyz_obj.append(torch.mean((pred - xyz.cuda()) ** 2 * xyz_weights))
-                        loss_xyz_obj = torch.min(torch.stack(loss_xyz_obj))
-                        loss_xyz.append(loss_xyz_obj)
-                        
-                loss_xyz = torch.mean(torch.stack(loss_xyz))
+                loss_xyz = torch.mean((scan_output_xyz[mask] - scan_xyz_labels[mask].cuda()) ** 2 * xyz_weights)  # only optimize xyz when there are objects
+                loss_class = obj_criterion(scan_output_class, scan_class_labels.cuda())
                 
                 loss_xyz *= cfg.xyz_factor
                 loss_scale *= cfg.scale_factor
                 
                 losses['loss_xyz'] = loss_xyz
                 losses['loss_scale'] = loss_scale
+                losses['loss_class'] = loss_class
                 
-                # loss for heatmap
                 curr_points = scan_points[:, 1:]
-                
+
                 xyz_pred = scan_output_xyz
-                prob_pred = torch.softmax(scan_output_obj, dim=-1)[:, 1]
                 if cfg.log_scale:
                     scale_pred = torch.exp(scan_output_scale)
                 else:
                     scale_pred = scan_output_scale
-                
-                # prob_gt = scan_obj_labels.cuda().float()
-                # prob_gt[prob_gt < 0] = 0  # minkowski will create -100 on overlaps
-                
+                class_pred = torch.argmax(scan_output_class[..., :-1], dim=-1)
+                prob_pred = torch.max(torch.softmax(scan_output_class, dim=-1)[..., :-1], dim=-1)[0]
+
                 with torch.no_grad():
                     grid_obj, grid_rot, grid_scale = hv(curr_points.to('cuda') * cfg.scannet_res, xyz_pred.contiguous(), scale_pred.contiguous(), prob_pred.contiguous())
-                        
+
                 map_scene = []            
                 boxes = []
                 scores = []
                 probs = []
+                classes = []
                 scan_points = curr_points.to('cuda') * cfg.scannet_res
                 corners = torch.stack([torch.min(scan_points, 0)[0], torch.max(scan_points, 0)[0]])
                 l, h, w = 2, 2, 2
@@ -487,11 +369,6 @@ def main(cfg):
                     cand = torch.stack(unravel_index(torch.argmax(grid_obj), grid_obj.shape))
                     cand_world = torch.tensor([corners[0, 0] + cfg.scannet_res * cand[0], corners[0, 1] + cfg.scannet_res * cand[1], corners[0, 2] + cfg.scannet_res * cand[2]]).cuda()
 
-                    # vis.heatmap(cv2.rotate(grid_obj.max(1)[0].cpu().numpy(), cv2.ROTATE_90_CLOCKWISE), win=2)
-                    # prob_pred = prob_pred.cpu().numpy()
-                    # rgb = np.array([cm(i)[:3] for i in prob_pred])
-                    # vis.scatter(X=scan_points.cpu().numpy(), win=1, opts=dict(markersize=3, markercolor=(rgb * 255).astype(np.int)))
-                    # import pdb; pdb.set_trace()
                     if grid_obj[cand[0], cand[1], cand[2]].item() < thresh_high:
                         break
                     
@@ -514,13 +391,20 @@ def main(cfg):
                                     & (-1 < coords_inv[:, 1]) & (coords_inv[:, 1] < 1) \
                                         & (-1 < coords_inv[:, 2]) & (coords_inv[:, 2] < 1)
                     bbox_coords = cand_coords[bbox_mask]
-
-                    grid_obj[bbox_coords[:, 0], bbox_coords[:, 1], bbox_coords[:, 2]] = 0
                     
                     coords_inv_world = ((scan_points - cand_world) @ rot_mat_full) / scale_full
                     bbox_mask_world = (-1 < coords_inv_world[:, 0]) & (coords_inv_world[:, 0] < 1) \
                             & (-1 < coords_inv_world[:, 1]) & (coords_inv_world[:, 1] < 1) \
                             & (-1 < coords_inv_world[:, 2]) & (coords_inv_world[:, 2] < 1)
+
+                    # back project elimination: current off   
+                    # prob_delta = torch.zeros_like(prob_pred)
+                    # prob_delta[bbox_mask_world] = prob_pred[bbox_mask_world]
+                    # if not torch.all(prob_delta == 0):
+                    #     grid_obj_delta, _, _ = hv(scan_points.cuda(), xyz_pred.contiguous(), scale_pred.contiguous(), prob_delta.contiguous())
+                    #     grid_obj -= grid_obj_delta
+
+                    grid_obj[bbox_coords[:, 0], bbox_coords[:, 1], bbox_coords[:, 2]] = 0
                             
                     mask = prob_pred[bbox_mask_world] > 0.3
                     if torch.sum(mask) < valid_ratio * torch.sum(bbox_mask_world) or torch.sum(bbox_mask_world) < thresh_low:
@@ -531,24 +415,37 @@ def main(cfg):
                     
                     if error > 0.3:
                         continue
+
+                    elems, counts = torch.unique(class_pred[bbox_mask_world][mask], return_counts=True)
+                    best_class_idx = elems[torch.argmax(counts)].item()
+                    best_class = idx2name[best_class_idx]
                     
                     probmax = torch.max(prob_pred[bbox_mask_world])
                     bbox = (rot_mat_full @ torch.diag(scale_full) @ bbox_raw.cuda().T).T + cand_world
                     boxes.append(bbox.cpu().numpy())
                     scores.append(probmax.item())
                     probs.append(probmax.item())
+                    classes.append(best_class_idx)
                     
-                # print(len(boxes))
-                # import pdb; pdb.set_trace()
-                # print(boxes[0])
-                pick = nms(np.array(boxes), np.array(scores), 0.3)
-                for i in pick:
-                    map_scene.append((cfg.category, boxes[i], probs[i]))
+                boxes = np.array(boxes)
+                scores = np.array(scores)
+                probs = np.array(probs)
+                classes = np.array(classes)
+
+                if len(classes) > 0:
+                    for i in range(nclasses):
+                        if (classes == i).sum() > 0:
+                            boxes_cls = boxes[classes == i]
+                            scores_cls = scores[classes == i]
+                            probs_cls = probs[classes == i]
+                            pick = nms(boxes_cls, scores_cls, 0.3)
+                            for j in pick:
+                                map_scene.append((idx2name[i], boxes_cls[j], probs_cls[j]))
                 
                 pred_map_cls[id_scan] = map_scene
                 
                 # read ground truth
-                lines = open('/home/neil/Scan2CAD/experiments/generated/results_gt/{}.txt'.format(id_scan)).read().splitlines()
+                lines = open(os.path.join(cfg.data.gt_path, '{}.txt'.format(id_scan))).read().splitlines()
                 map_scene = []
                 for line in lines:
                     tx, ty, tz, ry, sx, sy, sz = [float(v) for v in line.split(' ')[:7]]
@@ -567,10 +464,17 @@ def main(cfg):
                 losses_numeral = dict([(k, v.item()) for (k, v) in losses.items()])
                 logger.info(', '.join([k + ': {' + k + '}' for k in losses_numeral.keys()]).format(**losses_numeral))
             
-            ret_dict = compute_map(pred_map_cls, gt_map_cls)
-            if cfg.category != 'all':
-                logger.info('{} Recall: {}'.format(cfg.category, ret_dict['{} Recall'.format(cfg.category)]))
-                logger.info('{} Average Precision: {}'.format(cfg.category, ret_dict['{} Average Precision'.format(cfg.category)]))
-            
+            for thresh in [0.25, 0.5]:
+                print(thresh)
+                ret_dict = compute_map(pred_map_cls, gt_map_cls, thresh)
+                if cfg.category != 'all':
+                    logger.info('{} Recall: {}'.format(cfg.category, ret_dict['{} Recall'.format(cfg.category)]))
+                    logger.info('{} Average Precision: {}'.format(cfg.category, ret_dict['{} Average Precision'.format(cfg.category)]))
+                else:
+                    for k in range(nclasses):
+                        logger.info('{} Recall: {}'.format(idx2name[k], ret_dict['{} Recall'.format(idx2name[k])]))
+                        logger.info('{} Average Precision: {}'.format(idx2name[k], ret_dict['{} Average Precision'.format(idx2name[k])]))
+                    logger.info('mean Average Precision: {}'.format(ret_dict['mAP']))
+          
 if __name__ == "__main__":
     main()
