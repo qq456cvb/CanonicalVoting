@@ -119,7 +119,7 @@ def main(cfg):
     all_models = {}
     for category in all_categories:
         model = MinkUNet34C(6 if cfg.use_xyz else 3, 8)
-        model.load_state_dict(torch.load('pretrained/separate/{}.pth'.format('{:08d}'.format(cfg.category) if category != 'others' else 'others')))
+        model.load_state_dict(torch.load(hydra.utils.to_absolute_path('pretrained/separate/{}.pth'.format('{:08d}'.format(cfg.category) if category != 'others' else 'others'))))
         model = model.cuda()
         model.eval()
         
