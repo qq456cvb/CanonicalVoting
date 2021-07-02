@@ -37,7 +37,7 @@ python eval_separate.py
 Pretrained models for both joint and separate training settings can be found [here](https://drive.google.com/drive/folders/1Af5mRVwwI370txOREXkooea8nK_SwzGk?usp=sharing). You will get about 15.4 mAP and 20.9 mAP for joint and separate training settings, respectively.
 
 ## Citation
-If you find our algorithm useful, please consider citing:
+If you find our algorithm useful or use our processed data, please consider citing:
 ```
 @article{you2020canonical,
   title={Canonical Voting: Towards Robust Oriented Bounding Box Detection in 3D Scenes},
