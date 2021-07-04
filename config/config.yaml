@@ -6,6 +6,7 @@ data:
     train_segments: /path/to/scan2cad/train/scan2cad_segments.pkl
     val_segments: /path/to/scan2cad/val/scan2cad_segments.pkl
     gt_path: /path/to/results_gt
+    scene_nn_root: /path/to/scene_nn/root
 
 scannet_res: 0.03
 num_workers: 10

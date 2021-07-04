@@ -1,7 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 import torch
-from utils.dataloader import ScanNetXYZProbDataset
+from utils.dataloader import ScanNetXYZProbMultiDataset, SceneNNDataset
 from utils.minkunet import MinkUNet34C
 from time import time
 import hv_cuda
@@ -9,11 +9,12 @@ import logging
 import os
 logger = logging.getLogger(__name__)
 import MinkowskiEngine as ME
-from train_separate import collate_fn
+from train_joint import collate_fn
 from time import time
 import hydra
 from utils.calc_map import eval_det_multiprocessing, get_iou_obb
 
+SCENENN = False
 
 class HVFunction(torch.autograd.Function):
     @staticmethod
@@ -89,6 +90,20 @@ def nms(boxes, scores, overlap_threshold):
     return pick
 
 all_categories = ['02747177', '02808440', '02871439', '02933112', '03001627', '03211117', '04256520', '04379243', 'others']
+if SCENENN:
+    all_categories = ['cabinet', 'chair', 'table', 'sofa', 'display']
+    name2catname = {
+        '03211117': 'display',
+        '04379243': 'table',
+        '02808440': 'bathtub',
+        '02747177': 'trashbin',
+        '04256520': 'sofa',
+        '02933112': 'cabinet',
+        '02871439': 'bookshelf',
+        'others': 'others',
+        '03001627': 'chair',
+    }
+    catname2name = dict([(v, k) for k, v in name2catname.items()])
 color_palette = [
     (31, 119, 180), 		# 
     (255, 187, 120),		# 
@@ -110,7 +125,10 @@ def main(cfg):
     cfg.category = 'all'
     print(cfg.pretty())
     
-    val_dataset = ScanNetXYZProbDataset(cfg, training=False, augment=False)
+    if SCENENN:
+        val_dataset = SceneNNDataset(cfg, training=False, augment=False)
+    else:
+        val_dataset = ScanNetXYZProbMultiDataset(cfg, training=False, augment=False)
     print(len(val_dataset))
     val_dataloader = torch.utils.data.DataLoader(val_dataset, collate_fn=collate_fn, shuffle=False, batch_size=1, num_workers=10)
 
@@ -119,7 +137,7 @@ def main(cfg):
     all_models = {}
     for category in all_categories:
         model = MinkUNet34C(6 if cfg.use_xyz else 3, 8)
-        model.load_state_dict(torch.load(hydra.utils.to_absolute_path('pretrained/separate/{}.pth'.format('{:08d}'.format(cfg.category) if category != 'others' else 'others'))))
+        model.load_state_dict(torch.load(hydra.utils.to_absolute_path('pretrained/separate/{}.pth'.format('{:08d}'.format(catname2name[category] if SCENENN else category)))))
         model = model.cuda()
         model.eval()
         
@@ -137,7 +155,7 @@ def main(cfg):
     gt_map_cls = {}
     cnt = 0
     with tqdm(val_dataloader) as t:
-        for scan_ids, scan_points, scan_feats, scan_xyz_labels, scan_scale_labels, scan_obj_labels, scan_class_labels in t:
+        for scan_ids, scan_points, scan_feats, _, _, _ in t:
             id_scan = scan_ids[0]
             cnt += 1
             
@@ -249,11 +267,15 @@ def main(cfg):
             pred_map_cls[id_scan] = map_scene
             
             # read ground truth
-            lines = open(os.path.join(cfg.data.gt_path, '{}.txt'.format(id_scan))).read().splitlines()
+            lines = open(os.path.join(os.path.join(cfg.data.scene_nn_root, 'results_gt') if SCENENN else cfg.data.gt_path, '{}.txt'.format(id_scan))).read().splitlines()
             map_scene = []
             for line in lines:
                 tx, ty, tz, ry, sx, sy, sz = [float(v) for v in line.split(' ')[:7]]
                 category = line.split(' ')[-1]
+                if SCENENN and category == 'desk':
+                    category = 'table'
+                if SCENENN and category == 'television':
+                    category = 'display'
                 if cfg.category != 'all' and category != cfg.category:
                     continue
                 bbox = (np.array([[np.cos(ry), 0, -np.sin(ry)], [0, 1, 0], [np.sin(ry), 0, np.cos(ry)]]) @ np.diag([sx, sy, sz]) @ bbox_raw.cpu().numpy().T).T + np.array([tx, ty, tz])

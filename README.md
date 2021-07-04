@@ -36,6 +36,8 @@ python eval_separate.py
 ## Pretrained Models
 Pretrained models for both joint and separate training settings can be found [here](https://drive.google.com/drive/folders/1Af5mRVwwI370txOREXkooea8nK_SwzGk?usp=sharing). You will get about 15.4 mAP and 20.9 mAP for joint and separate training settings, respectively.
 
+## Test on SceneNN
+You will need to download our processed [SceneNN](https://mega.nz/folder/n7hzDQxb#mV8t4d7psPYN5bSkkxHuYw) data, which contains raw segmentation labels, instance labels and bounding box annotations. Set `scene_nn_root` in `config.yaml` to your downloaded directory. Then run `eval_joint.py` or `eval_separate.py` with modified variable `SCENENN=True`.
 ## Citation
 If you find our algorithm useful or use our processed data, please consider citing:
 ```

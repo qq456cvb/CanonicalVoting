@@ -1,5 +1,5 @@
 from utils.calc_map import eval_det_multiprocessing, get_iou_obb
-from utils.dataloader import ScanNetXYZProbMultiDataset
+from utils.dataloader import ScanNetXYZProbMultiDataset, SceneNNDataset
 import torch
 import hydra
 from utils.minkunet import MinkUNet34C
@@ -10,6 +10,8 @@ import MinkowskiEngine as ME
 import hv_cuda
 import torch.nn as nn
 import os
+
+SCENENN = False
 
 logger = logging.getLogger(__name__)
 
@@ -119,12 +121,27 @@ idx2name = {
     8: '02871439'
 }
 
+name2catname = {
+    '03211117': 'display',
+    '04379243': 'table',
+    '02808440': 'bathtub',
+    '02747177': 'trashbin',
+    '04256520': 'sofa',
+    '02933112': 'cabinet',
+    '02871439': 'bookshelf',
+    'others': 'others',
+    '03001627': 'chair',
+}
+
 
 @hydra.main(config_path='config/config.yaml')
 def main(cfg):
     cfg.category = 'all'
-        
-    val_dataset = ScanNetXYZProbMultiDataset(cfg, training=False, augment=False)
+    
+    if SCENENN:
+        val_dataset = SceneNNDataset(cfg, training=False, augment=False)
+    else:
+        val_dataset = ScanNetXYZProbMultiDataset(cfg, training=False, augment=False)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, collate_fn=collate_fn, shuffle=True, batch_size=1, num_workers=cfg.num_workers)
 
     logger.info('Start testing...')
@@ -237,7 +254,6 @@ def main(cfg):
 
             elems, counts = torch.unique(class_pred[bbox_mask_world][mask], return_counts=True)
             best_class_idx = elems[torch.argmax(counts)].item()
-            best_class = idx2name[best_class_idx]
             
             probmax = torch.max(prob_pred[bbox_mask_world])
             bbox = (rot_mat_full @ torch.diag(scale_full) @ bbox_raw.cuda().T).T + cand_world
@@ -253,22 +269,28 @@ def main(cfg):
 
         if len(classes) > 0:
             for i in range(nclasses):
+                if SCENENN and name2catname[idx2name[i]] not in ['cabinet', 'chair', 'table', 'sofa', 'display']:
+                    continue
                 if (classes == i).sum() > 0:
                     boxes_cls = boxes[classes == i]
                     scores_cls = scores[classes == i]
                     probs_cls = probs[classes == i]
                     pick = nms(boxes_cls, scores_cls, 0.3)
                     for j in pick:
-                        map_scene.append((idx2name[i], boxes_cls[j], probs_cls[j]))
+                        map_scene.append((name2catname[idx2name[i]], boxes_cls[j], probs_cls[j]))
         
         pred_map_cls[id_scan] = map_scene
         
         # read ground truth
-        lines = open(os.path.join(cfg.data.gt_path, '{}.txt'.format(id_scan))).read().splitlines()
+        lines = open(os.path.join(os.path.join(cfg.data.scene_nn_root, 'results_gt') if SCENENN else cfg.data.gt_path, '{}.txt'.format(id_scan))).read().splitlines()
         map_scene = []
         for line in lines:
             tx, ty, tz, ry, sx, sy, sz = [float(v) for v in line.split(' ')[:7]]
             category = line.split(' ')[-1]
+            if SCENENN and category == 'desk':
+                category = 'table'
+            if SCENENN and category == 'television':
+                category = 'display'
             bbox = (np.array([[np.cos(ry), 0, -np.sin(ry)], [0, 1, 0], [np.sin(ry), 0, np.cos(ry)]]) @ np.diag([sx, sy, sz]) @ bbox_raw.numpy().T).T + np.array([tx, ty, tz])
             bbox_mat = np.eye(4)
             bbox_mat[:3, :3] = np.array([[np.cos(ry), 0, -np.sin(ry)], [0, 1, 0], [np.sin(ry), 0, np.cos(ry)]]) @ np.diag([sx, sy, sz])
@@ -281,8 +303,9 @@ def main(cfg):
         print(thresh)
         ret_dict = compute_map(pred_map_cls, gt_map_cls, thresh)
         for k in range(nclasses):
-            logger.info('{} Recall: {}'.format(idx2name[k], ret_dict['{} Recall'.format(idx2name[k])]))
-            logger.info('{} Average Precision: {}'.format(idx2name[k], ret_dict['{} Average Precision'.format(idx2name[k])]))
+            name = name2catname[idx2name[k]]
+            logger.info('{} Recall: {}'.format(name, ret_dict['{} Recall'.format(name)]))
+            logger.info('{} Average Precision: {}'.format(name, ret_dict['{} Average Precision'.format(name)]))
         logger.info('mean Average Precision: {}'.format(ret_dict['mAP']))
         
 if __name__ == "__main__":
