@@ -50,5 +50,5 @@ If you find our algorithm useful or use our processed data, please consider citi
 ```
 
 ## TODOs
-- [ ] SceneNN dataset evaluation
+- [x] SceneNN dataset evaluation
 - [ ] Interactive demo
