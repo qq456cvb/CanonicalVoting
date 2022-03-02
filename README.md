@@ -1,4 +1,4 @@
-# CanonicalVoting
+# CanonicalVoting (Accepted to CVPR2022)
 Canonical Voting: Towards Robust Oriented Bounding Box Detection in 3D Scenes, with arxiv report [here](https://arxiv.org/abs/2011.12001).
 ![Visualization](figures/visualize.png)
 ## Introduction
