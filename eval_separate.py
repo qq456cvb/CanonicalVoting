@@ -120,10 +120,9 @@ color_palette = [
 ]
 
 
-@hydra.main(config_path='config/config.yaml', strict=False)
+@hydra.main(config_name='config', config_path='config')
 def main(cfg):
     cfg.category = 'all'
-    print(cfg.pretty())
     
     if SCENENN:
         val_dataset = SceneNNDataset(cfg, training=False, augment=False)

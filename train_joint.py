@@ -188,7 +188,7 @@ idx2name = {
 }
 
 
-@hydra.main(config_path='config/config.yaml')
+@hydra.main(config_name='config', config_path='config')
 def main(cfg):
     global BN_MOMENTUM_INIT
     global BN_MOMENTUM_MAX
@@ -204,10 +204,6 @@ def main(cfg):
     BASE_LEARNING_RATE = cfg.opt.learning_rate
     LR_DECAY_STEPS = [int(x) for x in cfg.opt.lr_decay_steps.split(',')]
     LR_DECAY_RATES = [float(x) for x in cfg.opt.lr_decay_rates.split(',')]
-    
-    if type(cfg.category) == int:
-        cfg.category = "{:08d}".format(cfg.category)
-    print(cfg.pretty())
         
     train_dataset = ScanNetXYZProbMultiDataset(cfg, training=True, augment=cfg.augment)
     val_dataset = ScanNetXYZProbMultiDataset(cfg, training=False, augment=False)

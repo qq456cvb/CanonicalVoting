@@ -134,7 +134,7 @@ name2catname = {
 }
 
 
-@hydra.main(config_path='config/config.yaml')
+@hydra.main(config_name='config', config_path='config')
 def main(cfg):
     cfg.category = 'all'
     
