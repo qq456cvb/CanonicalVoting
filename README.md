@@ -59,7 +59,7 @@ pip install hydra-core==1.1.1 scipy scikit-learn tqdm shapely numpy-quaternion==
 <details>
 <summary>Data Preparation</summary>
 
-You will need to first download [ScanNet](https://github.com/ScanNet/ScanNet) original dataset and [Scan2CAD](https://github.com/skanti/Scan2CAD) labels with oriented bounding boxes. Notice that we removed some ambiguous Scan2CAD annotations for `Bathtub` (wordnet id: 02808440) category, where include washbasins, washstands, etc. You can download our `Bathtub` fixed annotations on [Google Drive](https://drive.google.com/file/d/1-D4gvCcSIXKZGGmi1lHv91fqKq46sYJn/view?usp=sharing).
+You will need to first download the original [ScanNet](https://github.com/ScanNet/ScanNet) dataset. For [Scan2CAD](https://github.com/skanti/Scan2CAD) labels with oriented bounding boxes, we removed some ambiguous Scan2CAD annotations for `Bathtub` (wordnet id: 02808440) category, including washbasins, washstands, etc. You can download our `Bathtub` fixed annotations on [Google Drive](https://drive.google.com/file/d/1-D4gvCcSIXKZGGmi1lHv91fqKq46sYJn/view?usp=sharing).
 
 Download our annotated Scan2CAD model segments [here](https://drive.google.com/drive/folders/1yKIcQuJte9vToRLbZYgwdYqUDECBYs1T?usp=sharing) and preprocessed ground-truth boxes [here](https://drive.google.com/drive/folders/1i4ctu3oxwYG19kczqNgryj5uMnZVQZCv?usp=sharing) for evaluation. Adjust their path accordingly in `config/config.yaml`.
 </details>
