@@ -115,7 +115,7 @@ class MinkUNetBase(ResNetBase):
             self.PLANES[7],
             out_channels,
             kernel_size=1,
-            has_bias=True,
+            bias=True,
             dimension=D)
         self.relu = ME.MinkowskiReLU(inplace=True)
 
@@ -336,7 +336,7 @@ if __name__ == '__main__':
 
         # Get new data
         coords, feat, label = data_loader(is_classification=False)
-        input = ME.SparseTensor(feat, coords=coords, tensor_stride=2).to(device)
+        input = ME.SparseTensor(feat, coords, device=device, tensor_stride=2)
         label = label.to(device)
 
         # Forward

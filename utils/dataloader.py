@@ -195,9 +195,9 @@ class ScanNetXYZProbMultiDataset(torchdata.Dataset):
 
         feats = np.concatenate([scan_feats, scan_xyz_labels, scan_scale_labels], -1)
         discrete_idx = ME.utils.sparse_quantize(
-            coords=scan_points,
+            np.ascontiguousarray(scan_points),
             quantization_size=self.cfg.scannet_res,
-            return_index=True)
+            return_index=True)[1]
         
         discrete_coords = np.floor(scan_points[discrete_idx] / self.cfg.scannet_res).astype(np.float32)
         unique_feats = feats[discrete_idx]
@@ -291,9 +291,9 @@ class SceneNNDataset(torchdata.Dataset):
             augment_mat[:3, :3] = rot_mat @ augment_mat[:3, :3]
                 
         discrete_idx = ME.utils.sparse_quantize(
-            coords=scan_points,
+            np.ascontiguousarray(scan_points),
             quantization_size=self.cfg.scannet_res,
-            return_index=True)
+            return_index=True)[1]
 
         scan_points = scan_points[discrete_idx]
         scan_rgb = scan_rgb[discrete_idx]
@@ -417,9 +417,9 @@ class ScanNetXYZProbSymDataset(torchdata.Dataset):
         scan_points = scan_points.astype(np.float32)
         
         discrete_idx = ME.utils.sparse_quantize(
-            coords=scan_points,
+            np.ascontiguousarray(scan_points),
             quantization_size=self.cfg.scannet_res,
-            return_index=True)
+            return_index=True)[1]
         
         scan_points = scan_points[discrete_idx]
         scan_rgb = scan_rgb[discrete_idx]

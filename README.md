@@ -31,6 +31,10 @@ Canonical Voting is a 3D detection method that disentangles Hough voting targets
 
 # News
 - **[2022.03]** Our voting-based category-level 9D pose estimation method [CPPF](https://github.com/qq456cvb/CPPF), which achieves decent sim-to-real performance, is accepted to CVPR 2022!
+
+# Change Logs
+- [2022.04.11] Upload `Bathtub` fixed Scan2CAD annotations.
+- [2022.04.11] Update install dependencies to more recent versions.
 # Contents
 - [Overview](#overview)
 - [Installation](#installation)
@@ -43,19 +47,21 @@ Canonical Voting is a 3D detection method that disentangles Hough voting targets
 # Overview
 This is the official Pytorch implementation of our work: Canonical Voting.
 # Installation
-- [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine) v0.4.2
+- [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine) v0.5.3
 - Install our custom Hough Voting module under `houghvoting` folder, by running `python setup.py install`
-- Tested with PyTorch v1.3.1 + CUDA 10.0
+- Tested with PyTorch v1.8.1 + CUDA 10.2
 - Other dependecies: 
 ```
-pip install hydra-core scipy scikit-learn tqdm shapely numpy-quaternion pickle plyfile
+pip install hydra-core==1.1.1 scipy scikit-learn tqdm shapely numpy-quaternion==2021.8.30.10.33.11 pickle plyfile
 ```
 
 # Train and Test on ScanNet
 <details>
 <summary>Data Preparation</summary>
 
-You will need to first download [ScanNet](https://github.com/ScanNet/ScanNet) original dataset and [Scan2CAD](https://github.com/skanti/Scan2CAD) labels with oriented bounding boxes. Then download Scan2CAD model segments [here](https://drive.google.com/drive/folders/1yKIcQuJte9vToRLbZYgwdYqUDECBYs1T?usp=sharing) and then download our preprocessed ground-truth boxes [here](https://drive.google.com/drive/folders/1i4ctu3oxwYG19kczqNgryj5uMnZVQZCv?usp=sharing) for evaluation. Adjust their path accordingly in `config/config.yaml`.
+You will need to first download [ScanNet](https://github.com/ScanNet/ScanNet) original dataset and [Scan2CAD](https://github.com/skanti/Scan2CAD) labels with oriented bounding boxes. Notice that we removed some ambiguous Scan2CAD annotations for `Bathtub` (wordnet id: 02808440) category, where include washbasins, washstands, etc. You can download our `Bathtub` fixed annotations on [Google Drive](https://drive.google.com/file/d/1-D4gvCcSIXKZGGmi1lHv91fqKq46sYJn/view?usp=sharing).
+
+Download our annotated Scan2CAD model segments [here](https://drive.google.com/drive/folders/1yKIcQuJte9vToRLbZYgwdYqUDECBYs1T?usp=sharing) and preprocessed ground-truth boxes [here](https://drive.google.com/drive/folders/1i4ctu3oxwYG19kczqNgryj5uMnZVQZCv?usp=sharing) for evaluation. Adjust their path accordingly in `config/config.yaml`.
 </details>
 
 <details>

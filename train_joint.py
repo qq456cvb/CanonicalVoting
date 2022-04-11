@@ -247,7 +247,7 @@ def main(cfg):
                 
                 feats = scan_feats.reshape(-1, 6 if cfg.use_xyz else 3) # recenter to [-1, 1] ?
                 feats[:, -3:] = feats[:, -3:] * 2. - 1.
-                scan_input = ME.SparseTensor(feats, scan_points).to('cuda')
+                scan_input = ME.SparseTensor(feats, scan_points, device='cuda')
                 scan_output = model(scan_input)
                 
                 class_label_idx = scan_class_labels.cuda().unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 3)
@@ -304,7 +304,7 @@ def main(cfg):
                 
                 feats = scan_feats.reshape(-1, 6 if cfg.use_xyz else 3)  # recenter to [-1, 1]?
                 feats[:, -3:] = feats[:, -3:] * 2. - 1.
-                scan_input = ME.SparseTensor(feats, scan_points).to('cuda')
+                scan_input = ME.SparseTensor(feats, scan_points, device='cuda')
                 with torch.no_grad():
                     scan_output = model(scan_input)
                 

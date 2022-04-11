@@ -136,7 +136,7 @@ def main(cfg):
     all_models = {}
     for category in all_categories:
         model = MinkUNet34C(6 if cfg.use_xyz else 3, 8)
-        model.load_state_dict(torch.load(hydra.utils.to_absolute_path('pretrained/separate/{}.pth'.format('{:08d}'.format(catname2name[category] if SCENENN else category)))))
+        model.load_state_dict(torch.load(hydra.utils.to_absolute_path('pretrained/separate/{}.pth'.format('{}'.format(catname2name[category] if SCENENN else category)))))
         model = model.cuda()
         model.eval()
         
@@ -160,7 +160,7 @@ def main(cfg):
             
             feats = scan_feats.reshape(-1, 6 if cfg.use_xyz else 3) # recenter to [-1, 1] ?
             feats[:, -3:] = feats[:, -3:] * 2. - 1.
-            scan_input = ME.SparseTensor(feats, coords=scan_points).to('cuda')
+            scan_input = ME.SparseTensor(feats, scan_points, device='cuda')
             
             bundle = {}
             for category in all_categories:
