@@ -35,6 +35,7 @@ Canonical Voting is a 3D detection method that disentangles Hough voting targets
 # Change Logs
 - [2022.04.11] Upload `Bathtub` fixed Scan2CAD annotations.
 - [2022.04.11] Update install dependencies to more recent versions.
+- [2022.04.22] Fix a bug in evaluating joint models.
 # Contents
 - [Overview](#overview)
 - [Installation](#installation)
