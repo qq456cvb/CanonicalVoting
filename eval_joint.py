@@ -286,7 +286,10 @@ def main(cfg):
         map_scene = []
         for line in lines:
             tx, ty, tz, ry, sx, sy, sz = [float(v) for v in line.split(' ')[:7]]
-            category = line.split(' ')[-1]
+            if not SCENENN:
+                category = name2catname[line.split(' ')[-1]]
+            else:
+                category = line.split(' ')[-1]
             if SCENENN and category == 'desk':
                 category = 'table'
             if SCENENN and category == 'television':
