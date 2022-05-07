@@ -107,7 +107,9 @@ Run `eval_joint.py` or `eval_separate.py` with modified variable `SCENENN=True`.
 </details>
 
 # Train and Test on SUN RGB-D
-Coming soon.
+We are still organizing this part of code. For a brief guidance on reproducing results,
+we follow [BRNet](https://github.com/cheng052/BRNet) to prepare data for training and testing, while separately train a ``learned`` FPS proposal sampler as described in the paper.
+We modify L190 in `mmdet3d/models/dense_heads/vote_head.py` to take specific center point locations that are sampled from the learned voting-based proposal sampler. The probability is proportional to the square root of the vote map values, which is implemented by `torch.multinomial`. The hyper-parameter settings are exactly the same as those used in BRNet.
 
 # Pretrained Models
 <details>
