@@ -43,7 +43,6 @@ Canonical Voting is a 3D detection method that disentangles Hough voting targets
 - [Overview](#overview)
 - [Installation](#installation)
 - [Train and Test on ScanNet](#train-and-test-on-scannet)
-- [Test on SceneNN](#test-on-scenenn)
 - [Train and Test on SUN RGB-D](#train-and-test-on-sun-rgb-d)
 - [Pretrained Models](#pretrained-models)
 - [Citation](#citation)
@@ -63,9 +62,9 @@ pip install hydra-core==1.1.1 scipy scikit-learn tqdm shapely numpy-quaternion==
 <details>
 <summary>Data Preparation</summary>
 
-You will need to first download the original [ScanNet](https://github.com/ScanNet/ScanNet) dataset. For [Scan2CAD](https://github.com/skanti/Scan2CAD) labels with oriented bounding boxes, we removed some ambiguous Scan2CAD annotations for `Bathtub` (wordnet id: 02808440) category, including washbasins, washstands, etc. You can download our `Bathtub` fixed annotations on [Google Drive](https://drive.google.com/file/d/1-D4gvCcSIXKZGGmi1lHv91fqKq46sYJn/view?usp=sharing).
+You will need to first download the original [ScanNet](https://github.com/ScanNet/ScanNet) dataset. For [Scan2CAD](https://github.com/skanti/Scan2CAD) labels with oriented bounding boxes, we removed some ambiguous Scan2CAD annotations for `Bathtub` (wordnet id: 02808440) category, including washbasins, washstands, etc. You can download our `Bathtub` fixed annotations (`full_annotations.json`) from [Hugging Face](https://huggingface.co/datasets/qq456cvb/CanonicalVoting) (mirror: [Google Drive](https://drive.google.com/file/d/1-D4gvCcSIXKZGGmi1lHv91fqKq46sYJn/view?usp=sharing)).
 
-Download our annotated Scan2CAD model segments [here](https://drive.google.com/drive/folders/1yKIcQuJte9vToRLbZYgwdYqUDECBYs1T?usp=sharing) and preprocessed ground-truth boxes [here](https://drive.google.com/drive/folders/1i4ctu3oxwYG19kczqNgryj5uMnZVQZCv?usp=sharing) for evaluation. Adjust their path accordingly in `config/config.yaml`.
+Download our annotated Scan2CAD model segments (`scan2cad_segments/`) and preprocessed ground-truth boxes (`results_gt/`) for evaluation from the same [Hugging Face dataset](https://huggingface.co/datasets/qq456cvb/CanonicalVoting) (mirrors: [model segments](https://drive.google.com/drive/folders/1yKIcQuJte9vToRLbZYgwdYqUDECBYs1T?usp=sharing), [ground-truth boxes](https://drive.google.com/drive/folders/1i4ctu3oxwYG19kczqNgryj5uMnZVQZCv?usp=sharing)). Adjust their path accordingly in `config/config.yaml`.
 </details>
 
 <details>
@@ -94,19 +93,6 @@ To eval the separately trained model:
 ```
 python eval_separate.py
 ```
-</details>
-
-# Test on SceneNN
-<details>
-<summary>Data Preparation</summary>
-
-You will need to download our processed [SceneNN](https://mega.nz/folder/n7hzDQxb#mV8t4d7psPYN5bSkkxHuYw) data, which contains raw segmentation labels, instance labels and bounding box annotations. Set `scene_nn_root` in `config.yaml` to your downloaded directory.
-</details>
-
-<details>
-<summary>Evaluate mAP</summary>
-
-Run `eval_joint.py` or `eval_separate.py` with modified variable `SCENENN=True`.
 </details>
 
 # Train and Test on SUN RGB-D
