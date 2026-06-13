@@ -119,7 +119,7 @@ we follow [BRNet](https://github.com/cheng052/BRNet) to prepare data for trainin
 <details>
 <summary>Start Training</summary>
 
-First download the pretrained CanonicalVoting model on [Google Drive](https://drive.google.com/file/d/1-ZujySGPiLxzyu8OWsUkzxXsLHPisVMq/view?usp=sharing).
+First download the pretrained CanonicalVoting model from [Hugging Face](https://huggingface.co/qq456cvb/CanonicalVoting/blob/main/sunrgbd/checkpoint.pth) (mirror: [Google Drive](https://drive.google.com/file/d/1-ZujySGPiLxzyu8OWsUkzxXsLHPisVMq/view?usp=sharing)).
 
 To reproduce the result, replace the original BRNet module with out BRNetCanon in `sunrgbd/brnetcanon.py`. Besides, change L88 and L95 of `configs/_base_/models/brnet.py` to `sample_mod='custom'`; and change L11 of `configs/_base_/schedules/schedule_cos.py` to `total_epochs=72` since changing sampling strategy takes more epochs to converge.
 
@@ -130,13 +130,13 @@ To reproduce the result, replace the original BRNet module with out BRNetCanon i
 <details>
 <summary>Pretrained Model on ScanNet</summary>
 
-Pretrained models for both joint and separate training settings can be found [here](https://drive.google.com/drive/folders/1Af5mRVwwI370txOREXkooea8nK_SwzGk?usp=sharing). You will get about 15.4 mAP and 21.7 mAP for joint and separate training settings, respectively.
+Pretrained models for both joint and separate training settings can be found on [Hugging Face](https://huggingface.co/qq456cvb/CanonicalVoting/tree/main/scannet) (mirror: [Google Drive](https://drive.google.com/drive/folders/1Af5mRVwwI370txOREXkooea8nK_SwzGk?usp=sharing)). You will get about 15.4 mAP and 21.7 mAP for joint and separate training settings, respectively.
 </details>
 
 <details>
 <summary>Pretrained Model on SUN RGB-D</summary>
 
-Pretrained CanonicalVoting model can be found [here](https://drive.google.com/file/d/1-ZujySGPiLxzyu8OWsUkzxXsLHPisVMq/view?usp=sharing).
+Pretrained CanonicalVoting model can be found on [Hugging Face](https://huggingface.co/qq456cvb/CanonicalVoting/blob/main/sunrgbd/checkpoint.pth) (mirror: [Google Drive](https://drive.google.com/file/d/1-ZujySGPiLxzyu8OWsUkzxXsLHPisVMq/view?usp=sharing)).
 </details>
 
 # Citation
